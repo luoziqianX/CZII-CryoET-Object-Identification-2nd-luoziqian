@@ -91,27 +91,24 @@ destination_dir = "./working/overlay"
 import os
 import shutil
 
-# Walk through the source directory
-for root, dirs, files in os.walk(source_dir):
-    # Create corresponding subdirectories in the destination
-    relative_path = os.path.relpath(root, source_dir)
-    target_dir = os.path.join(destination_dir, relative_path)
-    os.makedirs(target_dir, exist_ok=True)
+def with_curation_prefix(filename):
+    return filename if filename.startswith("curation_0_") else f"curation_0_{filename}"
 
-    # Copy and rename each file
-    for file in files:
-        if file.startswith("curation_0_"):
-            new_filename = file
-        else:
-            new_filename = f"curation_0_{file}"
 
-        # Define full paths for the source and destination files
-        source_file = os.path.join(root, file)
-        destination_file = os.path.join(target_dir, new_filename)
+def copy_overlay_tree(source_dir, destination_dir):
+    for root, _, files in os.walk(source_dir):
+        relative_path = os.path.relpath(root, source_dir)
+        target_dir = os.path.join(destination_dir, relative_path)
+        os.makedirs(target_dir, exist_ok=True)
 
-        # Copy the file with the new name
-        shutil.copy2(source_file, destination_file)
-        print(f"Copied {source_file} to {destination_file}")
+        for file in files:
+            source_file = os.path.join(root, file)
+            destination_file = os.path.join(target_dir, with_curation_prefix(file))
+            shutil.copy2(source_file, destination_file)
+            print(f"Copied {source_file} to {destination_file}")
+
+
+copy_overlay_tree(source_dir, destination_dir)
 
 # %%
 import os
@@ -157,6 +154,41 @@ from collections import defaultdict
 
 # Just do this once
 generate_masks = True
+
+
+def build_data_record(run, tomo_type, segmentation_name, user_name, voxel_size):
+    tomogram = run.get_voxel_spacing(voxel_size).get_tomogram(tomo_type).numpy()
+    segmentation = run.get_segmentations(
+        name=segmentation_name,
+        user_id=user_name,
+        voxel_size=voxel_size,
+        is_multilabel=True,
+    )[0].numpy()
+    return {
+        "name": run.name,
+        "image": tomogram,
+        "image-rot90": np.rot90(tomogram, axes=(1, 2)),
+        "label": segmentation,
+        "label-rot90": np.rot90(segmentation, axes=(1, 2)),
+        "tomo_type": tomo_type,
+    }
+
+
+def save_numpy_record(record, output_dir):
+    variants = [
+        ("image", "image", ""),
+        ("image-rot90", "image", "-rot90"),
+        ("label", "label", ""),
+        ("label-rot90", "label", "-rot90"),
+    ]
+    for record_key, file_prefix, suffix in variants:
+        output_path = (
+            f"{output_dir}/train_{file_prefix}_{record['name']}_{record['tomo_type']}{suffix}.npy"
+        )
+        with open(output_path, "wb") as f:
+            np.save(f, record[record_key])
+
+
 for tomo_type in tomo_type_list:
     root = copick.from_file(copick_config_path)
     if generate_masks:
@@ -191,46 +223,15 @@ for tomo_type in tomo_type_list:
     dir_name = "./numpy-data-types-point-C"
     os.makedirs(dir_name, exist_ok=True)
     for run in tqdm(root.runs):
-        tomogram = run.get_voxel_spacing(voxel_size).get_tomogram(tomo_type).numpy()
-        tomogram_rot90 = np.rot90(tomogram, axes=(1, 2))
-        segmentation = run.get_segmentations(
-            name=copick_segmentation_name,
-            user_id=copick_user_name,
-            voxel_size=voxel_size,
-            is_multilabel=True,
-        )[0].numpy()
-        segmentation_rot90 = np.rot90(segmentation, axes=(1, 2))
         data_dicts.append(
-            {
-                "name": run.name,
-                "image": tomogram,
-                "image-rot90": tomogram_rot90,
-                "label": segmentation,
-                "label-rot90": segmentation_rot90,
-                "tomo_type": tomo_type,
-            }
+            build_data_record(
+                run,
+                tomo_type,
+                copick_segmentation_name,
+                copick_user_name,
+                voxel_size,
+            )
         )
 
-    for i in range(7):
-        with open(
-            f"{dir_name}/train_image_{data_dicts[i]['name']}_{data_dicts[i]['tomo_type']}.npy",
-            "wb",
-        ) as f:
-            np.save(f, data_dicts[i]["image"])
-        with open(
-            f"{dir_name}/train_image_{data_dicts[i]['name']}_{data_dicts[i]['tomo_type']}-rot90.npy",
-            "wb",
-        ) as f:
-            np.save(f, data_dicts[i]["image-rot90"])
-
-        with open(
-            f"{dir_name}/train_label_{data_dicts[i]['name']}_{data_dicts[i]['tomo_type']}.npy",
-            "wb",
-        ) as f:
-            # pdb.set_trace()
-            np.save(f, data_dicts[i]["label"])
-        with open(
-            f"{dir_name}/train_label_{data_dicts[i]['name']}_{data_dicts[i]['tomo_type']}-rot90.npy",
-            "wb",
-        ) as f:
-            np.save(f, data_dicts[i]["label-rot90"])
+    for record in data_dicts:
+        save_numpy_record(record, dir_name)

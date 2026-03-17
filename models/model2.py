@@ -12,6 +12,25 @@ from .decoder import *
 # ------------------------------------------------
 # processing
 
+ENCODER_DIMENSIONS = {
+    "resnet18": [64, 64, 128, 256, 512],
+    "resnet18d": [64, 64, 128, 256, 512],
+    "resnet34d": [64, 64, 128, 256, 512],
+    "resnet50d": [64, 256, 512, 1024, 2048],
+    "seresnext26d_32x4d": [64, 256, 512, 1024, 2048],
+    "convnext_small.fb_in22k": [96, 192, 384, 768],
+    "convnext_tiny.fb_in22k": [96, 192, 384, 768],
+    "convnext_base.fb_in22k": [128, 256, 512, 1024],
+    "tf_efficientnet_b4.ns_jft_in1k": [32, 56, 160, 448],
+    "tf_efficientnet_b5.ns_jft_in1k": [40, 64, 176, 512],
+    "tf_efficientnet_b6.ns_jft_in1k": [40, 72, 200, 576],
+    "tf_efficientnet_b7.ns_jft_in1k": [48, 80, 224, 640],
+    "pvt_v2_b1": [64, 128, 320, 512],
+    "pvt_v2_b2": [64, 128, 320, 512],
+    "pvt_v2_b4": [64, 128, 320, 512],
+}
+NET18_DECODER_DIM = [256, 128, 64, 32, 16]
+
 
 def encode_for_resnet(e, x, B, depth_scaling=[2, 2, 2, 2, 1]):
 
@@ -80,23 +99,7 @@ class Net(nn.Module):
         if cfg is not None:
             self.arch = cfg.arch
 
-        encoder_dim = {
-            "resnet18": [64, 64, 128, 256, 512],
-            "resnet18d": [64, 64, 128, 256, 512],
-            "resnet34d": [64, 64, 128, 256, 512],
-            "resnet50d": [64, 256, 512, 1024, 2048],
-            "seresnext26d_32x4d": [64, 256, 512, 1024, 2048],
-            "convnext_small.fb_in22k": [96, 192, 384, 768],
-            "convnext_tiny.fb_in22k": [96, 192, 384, 768],
-            "convnext_base.fb_in22k": [128, 256, 512, 1024],
-            "tf_efficientnet_b4.ns_jft_in1k": [32, 56, 160, 448],
-            "tf_efficientnet_b5.ns_jft_in1k": [40, 64, 176, 512],
-            "tf_efficientnet_b6.ns_jft_in1k": [40, 72, 200, 576],
-            "tf_efficientnet_b7.ns_jft_in1k": [48, 80, 224, 640],
-            "pvt_v2_b1": [64, 128, 320, 512],
-            "pvt_v2_b2": [64, 128, 320, 512],
-            "pvt_v2_b4": [64, 128, 320, 512],
-        }.get(self.arch, [768])
+        encoder_dim = ENCODER_DIMENSIONS.get(self.arch, [768])
         # decoder_dim = [256, 128, 64, 32, 16]
 
         self.encoder = timm.create_model(
@@ -140,106 +143,15 @@ class Net(nn.Module):
         return logit
 
 
-class Net18(nn.Module):
+class Net18(Net):
     def __init__(self, pretrained=False, cfg=None):
-        super(Net18, self).__init__()
-
-        self.register_buffer("D", torch.tensor(0))
-
-        num_class = 6 + 1
-
-        self.arch = "resnet18d"
-        if cfg is not None:
-            self.arch = cfg.arch
-
-        encoder_dim = {
-            "resnet18": [
-                64,
-                64,
-                128,
-                256,
-                512,
-            ],
-            "resnet18d": [
-                64,
-                64,
-                128,
-                256,
-                512,
-            ],
-            "resnet34d": [
-                64,
-                64,
-                128,
-                256,
-                512,
-            ],
-            "resnet50d": [
-                64,
-                256,
-                512,
-                1024,
-                2048,
-            ],
-            "seresnext26d_32x4d": [
-                64,
-                256,
-                512,
-                1024,
-                2048,
-            ],
-            "convnext_small.fb_in22k": [96, 192, 384, 768],
-            "convnext_tiny.fb_in22k": [96, 192, 384, 768],
-            "convnext_base.fb_in22k": [128, 256, 512, 1024],
-            "tf_efficientnet_b4.ns_jft_in1k": [32, 56, 160, 448],
-            "tf_efficientnet_b5.ns_jft_in1k": [40, 64, 176, 512],
-            "tf_efficientnet_b6.ns_jft_in1k": [40, 72, 200, 576],
-            "tf_efficientnet_b7.ns_jft_in1k": [48, 80, 224, 640],
-            "pvt_v2_b1": [64, 128, 320, 512],
-            "pvt_v2_b2": [64, 128, 320, 512],
-            "pvt_v2_b4": [64, 128, 320, 512],
-        }.get(self.arch, [768])
-        decoder_dim = [256, 128, 64, 32, 16]
-
-        self.encoder = timm.create_model(
-            model_name=self.arch,
+        super(Net18, self).__init__(
             pretrained=pretrained,
-            in_chans=3,
-            num_classes=0,
-            global_pool="",
-            features_only=True,
+            cfg=cfg,
+            arch="resnet18d",
+            decoder_dim=NET18_DECODER_DIM,
+            out_channels=6 + 1,
         )
-        self.decoder = MyUnetDecoder3d(
-            in_channel=encoder_dim[-1],
-            skip_channel=encoder_dim[:-1][::-1] + [0],
-            out_channel=decoder_dim,
-        )
-        self.mask = nn.Conv3d(decoder_dim[-1], num_class, kernel_size=1)
-
-    def forward(self, image):
-        with torch.no_grad():
-            B, C, D, H, W = image.shape
-            image = image.permute(0, 2, 1, 3, 4).reshape(-1, C, H, W)
-
-            x = image
-            x = x.expand(-1, 3, -1, -1)
-
-        # encode = self.encoder(x)[-5:]
-        encode = encode_for_resnet(self.encoder, x, B, depth_scaling=[2, 2, 2, 2, 1])
-        # [print(f'encode_{i}', e.shape) for i,e in enumerate(encode)]
-
-        # [print(f'encode_{i}', e.shape) for i, e in enumerate(encode)]
-        last, decode = self.decoder(
-            feature=encode[-1],
-            skip=encode[:-1][::-1] + [None],
-            depth_scaling=[1, 2, 2, 2, 2],
-        )
-        # print(f'last', last.shape)
-
-        logit = self.mask(last)
-        # print('logit', logit.shape)
-
-        return logit
 
 
 """'
