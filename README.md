@@ -7,53 +7,46 @@ First, clone the repository and install dependencies:
 pip install -r requirements.txt
 ```
 
+## Project Structure
+```
+.
+├── models/
+│   ├── __init__.py
+│   ├── base_model.py          # Shared Lightning module (loss, metrics, train/val logic)
+│   ├── decoder.py             # 2D and 3D UNet decoder blocks
+│   └── model2.py              # ResNet encoder + 3D decoder (UNet2E3D)
+├── utils/
+│   ├── __init__.py
+│   ├── patches.py             # 3D patch extraction with minimal overlap
+│   ├── data.py                # Data loading, transforms, and DataLoader creation
+│   ├── dataset.py             # Particle metadata and zarr/JSON readers
+│   └── czii_helper.py         # Time formatting and dotdict utility
+├── copick_utils/              # Copick data utilities (segmentation, writers, etc.)
+├── kaggle-notebooks/          # Inference and export notebooks
+├── make-numpy-dataset.py      # Data preparation: Copick → numpy
+├── train-SegResNet-6channel.py
+├── train-Unet3D-6channel.py
+├── train-Unet2E3D-6channel.py
+├── compute-cv-7TTA.ipynb      # Cross-validation scoring notebook
+├── requirements.txt
+└── LICENSE
+```
+
 ## Prepare Data
-1. You need to download the competition's data and set up the directory structure as shown below:
+1. You need to download the competition's data and set up the directory structure:
     ```
-    .
-    ├── compute-cv-7TTA.ipynb
-    ├── copick_test.config
-    ├── copick_utils
-    │   ├── __about__.py
-    │   ├── features
-    │   ├── __init__.py
-    │   ├── pickers
-    │   ├── __pycache__
-    │   ├── segmentation
-    │   └── writers
-    ├── data 
-    │   ├── sample_submission.csv
-    │   ├── test
-    │   │   └── static
-    │   └── train
-    │       ├── overlay
-    │       └── static
-    ├── make-numpy-dataset.py
-    ├── models
-    │   ├── decoder.py
-    │   ├── __init__.py
-    │   ├── model2.py
-    │   └── __pycache__
-    ├── __pycache__
-    │   ├── czii_helper.cpython-310.pyc
-    │   ├── dataset.cpython-310.pyc
-    │   ├── decoder.cpython-310.pyc
-    │   └── model2.cpython-310.pyc
-    ├── requirements.txt
-    ├── submission.csv
-    ├── train-SegResNet-6channel.py
-    ├── train-Unet2E3D-6channel.py
-    ├── train-Unet3D-6channel.py
-    └── utils
-        ├── czii_helper.py
-        ├── dataset.py
-        ├── __init__.py
-        └── __pycache__
+    data/
+    ├── sample_submission.csv
+    ├── test/
+    │   └── static/
+    └── train/
+        ├── overlay/
+        └── static/
     ```
 
 2. Create the numpy dataset for training:
    ```bash
-   python make-numpy-dataset.py 
+   python make-numpy-dataset.py
    ```
 
 ## Training
@@ -61,7 +54,7 @@ pip install -r requirements.txt
   ```bash
   python train-SegResNet-6channel.py
   ```
-- To train UNet6c:
+- To train UNet3D:
   ```bash
   python train-Unet3D-6channel.py
   ```
